@@ -33,55 +33,36 @@ app.post("/bc-pickup-updater", async (req, res) => {
       return res.status(400).send("No order ID");
     }
 
-    // Get order details
-    const orderRes = await fetch(`${BC_API_URL}/orders/${orderId}`, {
+    // Get shipping addresses (v2 API)
+    const shipAddrRes = await fetch(`${BC_API_URL}/orders/${orderId}/shipping_addresses`, {
       headers: {
         "X-Auth-Token": BC_ACCESS_TOKEN,
-        "Accept": "application/json",
-        "Content-Type": "application/json"
+        "Accept": "application/json"
       }
     });
+    const shipAddrs = await shipAddrRes.json();
+    console.log("Shipping addresses:", JSON.stringify(shipAddrs, null, 2));
 
-    const order = await orderRes.json();
-    console.log("Order shipping_methods:", JSON.stringify(order.shipping_methods, null, 2));
+    const shippingAddress = shipAddrs[0];
+    const methodName = shippingAddress?.shipping_method || "";
 
-    // Check if any shipping method contains "pickup"
-    const hasPickup = order.shipping_methods?.some(method =>
-      /pickup/i.test(method.shipping_method)
-    );
-
-    if (hasPickup) {
+    if (/pickup|pick[\s-]?up/i.test(methodName)) {
       console.log(`Order ${orderId} uses Store Pickup`);
 
-      // Get shipping addresses
-      const shipAddrRes = await fetch(`${BC_API_URL}/orders/${orderId}/shipping_addresses`, {
+      // Update shipping address
+      await fetch(`${BC_API_URL}/orders/${orderId}/shipping_addresses/${shippingAddress.id}`, {
+        method: "PUT",
         headers: {
           "X-Auth-Token": BC_ACCESS_TOKEN,
+          "Content-Type": "application/json",
           "Accept": "application/json"
-        }
+        },
+        body: JSON.stringify(WAREHOUSE_ADDRESS)
       });
 
-      const shipAddrs = await shipAddrRes.json();
-      const shippingAddressId = shipAddrs[0]?.id;
-
-      if (shippingAddressId) {
-        // Update shipping address
-        await fetch(`${BC_API_URL}/orders/${orderId}/shipping_addresses/${shippingAddressId}`, {
-          method: "PUT",
-          headers: {
-            "X-Auth-Token": BC_ACCESS_TOKEN,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          },
-          body: JSON.stringify(WAREHOUSE_ADDRESS)
-        });
-
-        console.log(`Order ${orderId} shipping address updated to warehouse.`);
-      } else {
-        console.log(`No shipping address found for order ${orderId}`);
-      }
+      console.log(`Order ${orderId} shipping address updated to warehouse.`);
     } else {
-      console.log(`Order ${orderId} is NOT Store Pickup`);
+      console.log(`Order ${orderId} is NOT Store Pickup (method: "${methodName}")`);
     }
 
     res.status(200).send("OK");
@@ -91,7 +72,6 @@ app.post("/bc-pickup-updater", async (req, res) => {
   }
 });
 
-// Render will use PORT provided in env
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Pickup updater running on port ${PORT}`);
