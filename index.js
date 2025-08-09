@@ -44,8 +44,8 @@ app.post("/bc-pickup-updater", async (req, res) => {
     const order = await orderRes.json();
 
     // Check if Store Pickup
-    if (order.shipping_methods && order.shipping_methods[0]?.toLowerCase().includes("store pickup")) {
-      console.log(`Order ${orderId} uses Store Pickup`);
+  if (order.shipping_methods && /pickup/i.test(order.shipping_methods[0])) {
+    console.log(`Order ${orderId} uses Store Pickup`);
 
       // Get shipping addresses
       const shipAddrRes = await fetch(`${BC_API_URL}/orders/${orderId}/shipping_addresses`, {
