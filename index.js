@@ -41,11 +41,17 @@ app.post("/bc-pickup-updater", async (req, res) => {
         "Content-Type": "application/json"
       }
     });
-    const order = await orderRes.json();
 
-    // Check if Store Pickup
-  if (order.shipping_methods && /pickup/i.test(order.shipping_methods[0])) {
-    console.log(`Order ${orderId} uses Store Pickup`);
+    const order = await orderRes.json();
+    console.log("Order shipping_methods:", JSON.stringify(order.shipping_methods, null, 2));
+
+    // Check if any shipping method contains "pickup"
+    const hasPickup = order.shipping_methods?.some(method =>
+      /pickup/i.test(method.shipping_method)
+    );
+
+    if (hasPickup) {
+      console.log(`Order ${orderId} uses Store Pickup`);
 
       // Get shipping addresses
       const shipAddrRes = await fetch(`${BC_API_URL}/orders/${orderId}/shipping_addresses`, {
@@ -54,6 +60,7 @@ app.post("/bc-pickup-updater", async (req, res) => {
           "Accept": "application/json"
         }
       });
+
       const shipAddrs = await shipAddrRes.json();
       const shippingAddressId = shipAddrs[0]?.id;
 
