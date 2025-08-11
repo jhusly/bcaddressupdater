@@ -11,12 +11,12 @@ const BC_API_URL = `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3`;
 
 // Fixed warehouse address
 const WAREHOUSE_ADDRESS = {
-  first_name: "Warehouse",
-  last_name: "Pickup",
-  street_1: "123 Warehouse Street",
+  first_name: "Mid Atlantic Distribution",
+  last_name: "Store Pickup",
+  street_1: "1000 Parliament Court, Suite 300",
   city: "Durham",
   state: "North Carolina",
-  zip: "27701",
+  zip: "27703",
   country: "United States",
   phone: "1234567890"
 };
