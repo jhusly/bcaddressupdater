@@ -11,8 +11,8 @@ const BC_API_URL = `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2`;
 
 // Your fixed warehouse address
 const WAREHOUSE_ADDRESS = {
-  first_name: "Warehouse",
-  last_name: "Pickup",
+  first_name: "MAD - ",
+  last_name: "Warehouse Pickup",
   street_1: "123 Warehouse Street",
   city: "Durham",
   state: "North Carolina",
