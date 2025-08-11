@@ -11,15 +11,40 @@ const BC_API_URL = `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3`;
 
 // Fixed warehouse address
 const WAREHOUSE_ADDRESS = {
-  first_name: "Mid Atlantic Distribution",
+  first_name: "MAD",
   last_name: "Store Pickup",
-  street_1: "1000 Parliament Court, Suite 300",
+  street_1: "4000 Parliament Court, Suite 100",
   city: "Durham",
   state: "North Carolina",
-  zip: "27703",
+  zip: "27701",
   country: "United States",
   phone: "1234567890"
 };
+
+// Helper: retry order fetch
+async function fetchOrderWithRetry(orderId, retries = 3, delayMs = 2000) {
+  for (let i = 0; i < retries; i++) {
+    const orderRes = await fetch(
+      `${BC_API_URL}/orders/${orderId}?include=shipping_addresses`,
+      {
+        headers: {
+          "X-Auth-Token": BC_ACCESS_TOKEN,
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const orderData = await orderRes.json();
+    if (orderData.data) {
+      return orderData.data; // Found order
+    }
+
+    console.log(`Order ${orderId} not found yet. Retry ${i + 1}/${retries}...`);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  return null; // All retries failed
+}
 
 // Webhook endpoint
 app.post("/bc-pickup-updater", async (req, res) => {
@@ -34,28 +59,16 @@ app.post("/bc-pickup-updater", async (req, res) => {
       return res.status(400).send("No order ID");
     }
 
-    // Get order details (with shipping addresses in one call)
-    const orderRes = await fetch(
-      `${BC_API_URL}/orders/${orderId}?include=shipping_addresses`,
-      {
-        headers: {
-          "X-Auth-Token": BC_ACCESS_TOKEN,
-          "Accept": "application/json",
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    const orderData = await orderRes.json();
-    const order = orderData.data;
+    // Get order details with retry
+    const order = await fetchOrderWithRetry(orderId);
 
     if (!order) {
-      console.log(`Order ${orderId} not found`);
+      console.log(`Order ${orderId} still not found after retries`);
       return res.status(404).send("Order not found");
     }
 
-    // Debug: log shipping methods
-    console.log(`Order shipping_methods: ${JSON.stringify(order.shipping_method)}`);
+    // Debug: log shipping method
+    console.log(`Order shipping_method: ${JSON.stringify(order.shipping_method)}`);
 
     // Check if Store Pickup
     if (order.shipping_method && /pickup/i.test(order.shipping_method)) {
