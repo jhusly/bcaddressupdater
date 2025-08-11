@@ -7,13 +7,13 @@ app.use(express.json());
 // BigCommerce API credentials
 const BC_STORE_HASH = process.env.BC_STORE_HASH;
 const BC_ACCESS_TOKEN = process.env.BC_ACCESS_TOKEN;
-const BC_API_URL = `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3`;
+const BC_API_URL = `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2`;
 
-// Fixed warehouse address
+// Your fixed warehouse address
 const WAREHOUSE_ADDRESS = {
-  first_name: "MAD",
-  last_name: "Store Pickup",
-  street_1: "4000 Parliament Court, Suite 100",
+  first_name: "Warehouse",
+  last_name: "Pickup",
+  street_1: "123 Warehouse Street",
   city: "Durham",
   state: "North Carolina",
   zip: "27701",
@@ -21,32 +21,6 @@ const WAREHOUSE_ADDRESS = {
   phone: "1234567890"
 };
 
-// Helper: retry order fetch
-async function fetchOrderWithRetry(orderId, retries = 3, delayMs = 2000) {
-  for (let i = 0; i < retries; i++) {
-    const orderRes = await fetch(
-      `${BC_API_URL}/orders/${orderId}?include=shipping_addresses`,
-      {
-        headers: {
-          "X-Auth-Token": BC_ACCESS_TOKEN,
-          "Accept": "application/json",
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    const orderData = await orderRes.json();
-    if (orderData.data) {
-      return orderData.data; // Found order
-    }
-
-    console.log(`Order ${orderId} not found yet. Retry ${i + 1}/${retries}...`);
-    await new Promise(resolve => setTimeout(resolve, delayMs));
-  }
-  return null; // All retries failed
-}
-
-// Webhook endpoint
 app.post("/bc-pickup-updater", async (req, res) => {
   console.log("=== Webhook Triggered ===");
   console.log("Headers:", JSON.stringify(req.headers, null, 2));
@@ -59,48 +33,36 @@ app.post("/bc-pickup-updater", async (req, res) => {
       return res.status(400).send("No order ID");
     }
 
-    // Get order details with retry
-    const order = await fetchOrderWithRetry(orderId);
+    // Get shipping addresses (v2 API)
+    const shipAddrRes = await fetch(`${BC_API_URL}/orders/${orderId}/shipping_addresses`, {
+      headers: {
+        "X-Auth-Token": BC_ACCESS_TOKEN,
+        "Accept": "application/json"
+      }
+    });
+    const shipAddrs = await shipAddrRes.json();
+    console.log("Shipping addresses:", JSON.stringify(shipAddrs, null, 2));
 
-    if (!order) {
-      console.log(`Order ${orderId} still not found after retries`);
-      return res.status(404).send("Order not found");
-    }
+    const shippingAddress = shipAddrs[0];
+    const methodName = shippingAddress?.shipping_method || "";
 
-    // Debug: log shipping method
-    console.log(`Order shipping_method: ${JSON.stringify(order.shipping_method)}`);
-
-    // Check if Store Pickup
-    if (order.shipping_method && /pickup/i.test(order.shipping_method)) {
+    if (/pickup|pick[\s-]?up/i.test(methodName)) {
       console.log(`Order ${orderId} uses Store Pickup`);
 
-      const shippingAddressId = order.shipping_addresses?.[0]?.id;
-      if (shippingAddressId) {
-        // Update shipping address
-        const updateRes = await fetch(
-          `${BC_API_URL}/orders/${orderId}/shipping_addresses/${shippingAddressId}`,
-          {
-            method: "PUT",
-            headers: {
-              "X-Auth-Token": BC_ACCESS_TOKEN,
-              "Content-Type": "application/json",
-              "Accept": "application/json"
-            },
-            body: JSON.stringify(WAREHOUSE_ADDRESS)
-          }
-        );
+      // Update shipping address
+      await fetch(`${BC_API_URL}/orders/${orderId}/shipping_addresses/${shippingAddress.id}`, {
+        method: "PUT",
+        headers: {
+          "X-Auth-Token": BC_ACCESS_TOKEN,
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify(WAREHOUSE_ADDRESS)
+      });
 
-        if (!updateRes.ok) {
-          const errorText = await updateRes.text();
-          throw new Error(`Failed to update address: ${errorText}`);
-        }
-
-        console.log(`Order ${orderId} shipping address updated to warehouse.`);
-      } else {
-        console.log(`No shipping address found for order ${orderId}`);
-      }
+      console.log(`Order ${orderId} shipping address updated to warehouse.`);
     } else {
-      console.log(`Order ${orderId} is NOT Store Pickup`);
+      console.log(`Order ${orderId} is NOT Store Pickup (method: "${methodName}")`);
     }
 
     res.status(200).send("OK");
@@ -110,7 +72,6 @@ app.post("/bc-pickup-updater", async (req, res) => {
   }
 });
 
-// Render will use PORT from env
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Pickup updater running on port ${PORT}`);
